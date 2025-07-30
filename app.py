@@ -13,6 +13,37 @@ from model_predictor import ModelPredictor
 from visualizations import DashboardViz
 from utils import format_metrics, export_data, check_alerts
 
+def setup_directories():
+    """Create required directories if they don't exist"""
+    directories = ['data', 'models', 'src']
+    for directory in directories:
+        Path(directory).mkdir(exist_ok=True)
+
+# Initialize components with better error handling
+@st.cache_resource
+def init_components():
+    try:
+        setup_directories()
+        
+        components = {
+            'data_loader': DataLoader(),
+            'predictor': ModelPredictor(),
+            'viz': DashboardViz()
+        }
+        
+        return components
+        
+    except Exception as e:
+        st.error(f"❌ Error initializing components: {str(e)}")
+        st.info("💡 Menggunakan mode demo...")
+        
+        # Return demo components
+        return {
+            'data_loader': DataLoader(),
+            'predictor': ModelPredictor(),
+            'viz': DashboardViz()
+        }
+
 # Page configuration
 st.set_page_config(
     page_title="Dashboard Prediksi IPH Kota Batu",
@@ -330,12 +361,28 @@ def main():
         if 'predictions' in st.session_state:
             st.markdown(f'<div class="panel-title">📈 Grafik Prediksi IPH - Model: {st.session_state["selected_model"]}</div>', unsafe_allow_html=True)
             
-            fig_forecast = components['viz'].create_forecast_chart(
-                df, 
-                st.session_state['predictions'],
-                st.session_state['selected_model']
-            )
-            st.plotly_chart(fig_forecast, use_container_width=True)
+            try:
+                fig_forecast = components['viz'].create_forecast_chart(
+                    df, 
+                    st.session_state['predictions'],
+                    st.session_state['selected_model']
+                )
+                st.plotly_chart(fig_forecast, use_container_width=True)
+            except Exception as e:
+                st.error(f"❌ Error menampilkan grafik prediksi: {str(e)}")
+                st.info("💡 Coba buat prediksi ulang atau pilih model lain")
+                
+                # Show basic info instead
+                predictions = st.session_state['predictions']
+                st.write("**Hasil Prediksi:**")
+                pred_df = pd.DataFrame({
+                    'Tanggal': predictions['future_dates'],
+                    'Prediksi IPH (%)': [f"{p:+.2f}%" for p in predictions['predictions']]
+                })
+                st.dataframe(pred_df, use_container_width=True)
+        else:
+            st.info("🔮 Buat prediksi terlebih dahulu untuk melihat grafik forecasting")
+
         
         # Dashboard panels
         st.markdown("## 📊 Panel Analisis")
