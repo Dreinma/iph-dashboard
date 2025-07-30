@@ -8,42 +8,52 @@ import os
 class DataLoader:
     def __init__(self):
         # More robust path handling
-        if hasattr(st, 'secrets') and 'base_path' in st.secrets:
-            self.base_path = Path(st.secrets['base_path'])
-        else:
-            # Try different base path strategies
-            possible_bases = [
-                Path(__file__).parent.parent,  # Relative to this file
-                Path.cwd(),                    # Current working directory
-                Path('.')                      # Current directory
-            ]
-            
-            for base in possible_bases:
-                data_dir = base / "data"
-                if data_dir.exists():
-                    self.base_path = base
-                    break
-            else:
-                self.base_path = Path('.')
-        
+        self.base_path = Path(__file__).parent.parent  # Go up to project root
         self.data_path = self.base_path / "data"
         self.excel_file = "IPH_Kota_Batu.xlsx"
         
         # Create data directory if it doesn't exist
         self.data_path.mkdir(exist_ok=True)
+    
+    def find_excel_file(self):
+        """Find Excel file using multiple strategies"""
+        possible_paths = [
+            # Current approach
+            self.data_path / self.excel_file,
+            
+            # Relative to current working directory
+            Path.cwd() / "data" / self.excel_file,
+            
+            # Alternative names
+            self.data_path / "iph_kota_batu.xlsx",
+            self.data_path / "IPH Kota Batu.xlsx",
+            self.data_path / "data_iph_modeling.xlsx"
+        ]
         
-        # Debug info (remove in production)
-        print(f"🔍 Base path: {self.base_path.absolute()}")
-        print(f"🔍 Data path: {self.data_path.absolute()}")
-        print(f"🔍 Excel file exists: {(self.data_path / self.excel_file).exists()}")
+        for path in possible_paths:
+            if path.exists():
+                st.success(f"✅ File ditemukan di: {path}")
+                return path
+        
+        return None
     
     @st.cache_data
     def load_excel_data(_self):
-        """Load data from Excel file"""
-        file_path = _self.data_path / _self.excel_file
+        """Load data from Excel file with improved error handling"""
+        # First try to find Excel file
+        excel_path = _self.find_excel_file()
         
-        # Check if file exists
-        if not file_path.exists():
+        if excel_path is None:
+            # Try CSV as fallback
+            csv_path = _self.data_path / "data_iph_modeling.csv"
+            if csv_path.exists():
+                try:
+                    df = pd.read_csv(csv_path)
+                    st.success(f"✅ Data CSV berhasil dimuat: {len(df)} records")
+                    return _self._preprocess_data(df)
+                except Exception as e:
+                    st.error(f"❌ Error loading CSV: {str(e)}")
+            
             st.warning(f"⚠️ File {_self.excel_file} tidak ditemukan di folder data/")
             st.info("💡 Silakan upload file atau gunakan data sample")
             return None
@@ -55,14 +65,14 @@ class DataLoader:
             
             for sheet in sheet_names:
                 try:
-                    df = pd.read_excel(file_path, sheet_name=sheet)
+                    df = pd.read_excel(str(excel_path), sheet_name=sheet)
                     st.success(f"✅ Data berhasil dimuat dari sheet: {sheet}")
                     break
-                except:
+                except Exception as sheet_error:
                     continue
             
             if df is None:
-                st.error("❌ Gagal membaca file Excel")
+                st.error("❌ Gagal membaca file Excel dari semua sheet")
                 return None
                 
             return _self._preprocess_data(df)
@@ -73,7 +83,7 @@ class DataLoader:
             return None
     
     def upload_data(self):
-        """Handle file upload"""
+        """Handle file upload with improved error handling"""
         st.markdown("### 📤 Upload File Data IPH")
         
         uploaded_file = st.file_uploader(
@@ -87,17 +97,44 @@ class DataLoader:
                 # Show file info
                 st.info(f"📁 File: {uploaded_file.name} ({uploaded_file.size} bytes)")
                 
+                # Read file based on extension
                 if uploaded_file.name.endswith('.csv'):
                     df = pd.read_csv(uploaded_file)
                 else:
                     df = pd.read_excel(uploaded_file)
                 
+                # Check if DataFrame is valid and not empty
+                if df is None:
+                    st.error("❌ File kosong atau tidak dapat dibaca")
+                    return None
+                
+                if df.empty:
+                    st.error("❌ File tidak mengandung data")
+                    return None
+                
                 st.success(f"✅ File berhasil diupload: {len(df)} baris data")
-                return self._preprocess_data(df)
+                
+                # Show column preview
+                st.info(f"📋 Kolom yang ditemukan: {', '.join(df.columns.tolist())}")
+                
+                # Preprocess the data
+                processed_df = self._preprocess_data(df)
+                
+                # Check if preprocessing was successful
+                if processed_df is not None and not processed_df.empty:
+                    return processed_df
+                else:
+                    st.error("❌ Gagal memproses data yang diupload")
+                    return None
                 
             except Exception as e:
                 st.error(f"❌ Error processing file: {str(e)}")
                 st.info("💡 Pastikan format file sesuai dengan template")
+                
+                # Show detailed error for debugging
+                with st.expander("🔍 Detail Error (untuk debugging)"):
+                    st.code(str(e))
+                
                 return None
         
         return None
@@ -164,19 +201,34 @@ class DataLoader:
     
     def _create_minimal_sample(self):
         """Create minimal sample data as fallback"""
-        dates = pd.date_range(start='2024-01-01', periods=50, freq='W')
-        iph_values = np.random.normal(0, 1, 50)
-        
-        df = pd.DataFrame({
-            'Tanggal': dates,
-            'Indikator_Harga': iph_values
-        })
-        
-        return self._preprocess_data(df)
+        try:
+            dates = pd.date_range(start='2024-01-01', periods=50, freq='W')
+            iph_values = np.random.normal(0, 1, 50)
+            
+            df = pd.DataFrame({
+                'Tanggal': dates,
+                'Indikator_Harga': iph_values
+            })
+            
+            processed_df = self._preprocess_data(df)
+            return processed_df
+            
+        except Exception as e:
+            st.error(f"❌ Error creating minimal sample: {str(e)}")
+            return None
     
     def _preprocess_data(self, df):
-        """Clean and preprocess data"""
+        """Clean and preprocess data with improved error handling"""
         try:
+            # Check if df is None or empty
+            if df is None:
+                st.error("❌ Data kosong (None)")
+                return None
+                
+            if df.empty:
+                st.error("❌ DataFrame kosong")
+                return None
+            
             st.info("🔄 Preprocessing data...")
             
             # Handle different column name variations
@@ -185,7 +237,8 @@ class DataLoader:
                 'Indikator_Harga',
                 'IPH',
                 'Indikator Perubahan Harga',
-                ' Indikator Perubahan Harga (%)'  # With leading space
+                ' Indikator Perubahan Harga (%)',  # With leading space
+                'Indikator_Harga'  # From CSV file
             ]
             
             iph_col = None
@@ -204,19 +257,30 @@ class DataLoader:
             
             # Handle date column
             if 'Tanggal' not in df.columns:
-                if 'Bulan' in df.columns and 'Minggu ke-' in df.columns:
-                    # Try to create dates from Bulan and Minggu
-                    df['Tanggal'] = pd.date_range(
-                        start='2023-01-01', 
-                        periods=len(df), 
-                        freq='W'
-                    )
-                else:
-                    df['Tanggal'] = pd.date_range(
-                        start='2023-01-01', 
-                        periods=len(df), 
-                        freq='W'
-                    )
+                # Look for date-like columns
+                date_columns = ['Date', 'Periode', 'Waktu', 'Tgl']
+                date_col = None
+                
+                for col in date_columns:
+                    if col in df.columns:
+                        df = df.rename(columns={col: 'Tanggal'})
+                        date_col = col
+                        break
+                
+                if date_col is None:
+                    if 'Bulan' in df.columns and 'Minggu ke-' in df.columns:
+                        # Try to create dates from Bulan and Minggu
+                        df['Tanggal'] = pd.date_range(
+                            start='2023-01-01', 
+                            periods=len(df), 
+                            freq='W'
+                        )
+                    else:
+                        df['Tanggal'] = pd.date_range(
+                            start='2023-01-01', 
+                            periods=len(df), 
+                            freq='W'
+                        )
             
             # Convert to datetime
             df['Tanggal'] = pd.to_datetime(df['Tanggal'], errors='coerce')
@@ -246,16 +310,37 @@ class DataLoader:
             # Create lag features for model prediction
             df = self._create_features(df)
             
+            # Final validation
+            if df is None or df.empty:
+                st.error("❌ Data kosong setelah feature creation")
+                return None
+            
             st.success(f"✅ Preprocessing selesai: {len(df)} records valid")
             return df
             
         except Exception as e:
             st.error(f"❌ Error in preprocessing: {str(e)}")
+            
+            # Show detailed error for debugging
+            with st.expander("🔍 Detail Error Preprocessing"):
+                st.code(str(e))
+                if df is not None and not df.empty:
+                    st.write("**DataFrame Info:**")
+                    st.write(f"Shape: {df.shape}")
+                    st.write(f"Columns: {df.columns.tolist()}")
+                    st.write("**Sample Data:**")
+                    st.dataframe(df.head())
+            
             return None
     
     def _create_features(self, df):
         """Create lag features and moving averages for model prediction"""
         try:
+            # Check if df is valid
+            if df is None or df.empty:
+                st.error("❌ DataFrame kosong dalam feature creation")
+                return None
+            
             # Create lag features (1-4 periods back)
             for i in range(1, 5):
                 df[f'Lag_{i}'] = df['Indikator_Harga'].shift(i)
@@ -276,11 +361,15 @@ class DataLoader:
             
         except Exception as e:
             st.warning(f"⚠️ Error creating features: {str(e)}")
+            
             # Return df with basic features filled with 0
-            for col in ['Lag_1', 'Lag_2', 'Lag_3', 'Lag_4', 'MA_3', 'MA_7']:
-                if col not in df.columns:
-                    df[col] = 0
-            return df
+            try:
+                for col in ['Lag_1', 'Lag_2', 'Lag_3', 'Lag_4', 'MA_3', 'MA_7']:
+                    if col not in df.columns:
+                        df[col] = 0
+                return df
+            except:
+                return None
     
     def get_feature_columns(self):
         """Return the feature columns used by models"""
@@ -288,6 +377,14 @@ class DataLoader:
     
     def validate_data_structure(self, df):
         """Validate if data has required structure"""
+        if df is None:
+            st.error("❌ Data is None")
+            return False
+            
+        if df.empty:
+            st.error("❌ Data is empty")
+            return False
+            
         required_cols = ['Tanggal', 'Indikator_Harga']
         missing_cols = [col for col in required_cols if col not in df.columns]
         
@@ -296,8 +393,16 @@ class DataLoader:
             return False
         
         return True
+    
     def validate_data_quality(self, df):
         """Enhanced data quality validation"""
+        if df is None or df.empty:
+            return {
+                'missing_values': {},
+                'data_range': {'start_date': None, 'end_date': None, 'total_periods': 0},
+                'iph_statistics': {'min': None, 'max': None, 'mean': None, 'std': None}
+            }
+            
         quality_report = {
             'missing_values': df.isnull().sum().to_dict(),
             'data_range': {

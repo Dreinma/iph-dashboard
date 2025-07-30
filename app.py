@@ -62,19 +62,38 @@ def setup_directories():
 # Production Optimized Caching
 @st.cache_data(ttl=Config.CACHE_TTL, show_spinner=False)
 def load_and_process_data(data_source, uploaded_file_content=None):
-    """Cached data loading and processing"""
+    """Cached data loading and processing with better error handling"""
     try:
         loader = DataLoader()
         
         if data_source == "📁 Load File Excel":
-            return loader.load_excel_data()
-        elif data_source == "📤 Upload File Baru" and uploaded_file_content:
-            return loader._preprocess_data(uploaded_file_content)
+            result = loader.load_excel_data()
+        elif data_source == "📤 Upload File Baru" and uploaded_file_content is not None:
+            # Process uploaded content
+            processed_result = loader._preprocess_data(uploaded_file_content)
+            result = processed_result
         else:
+            result = loader.load_sample_data()
+        
+        # Validate result before returning
+        if result is None:
+            st.warning("⚠️ Gagal memuat data, menggunakan sample data...")
             return loader.load_sample_data()
+        
+        if result.empty:
+            st.warning("⚠️ Data kosong, menggunakan sample data...")
+            return loader.load_sample_data()
+            
+        return result
+        
     except Exception as e:
         st.error(f"❌ Error loading data: {str(e)}")
-        return None
+        # Fallback to sample data
+        try:
+            loader = DataLoader()
+            return loader.load_sample_data()
+        except:
+            return None
 
 @st.cache_resource
 def load_models():
