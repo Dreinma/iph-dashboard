@@ -7,11 +7,35 @@ import os
 
 class DataLoader:
     def __init__(self):
-        self.data_path = Path("data")
+        # More robust path handling
+        if hasattr(st, 'secrets') and 'base_path' in st.secrets:
+            self.base_path = Path(st.secrets['base_path'])
+        else:
+            # Try different base path strategies
+            possible_bases = [
+                Path(__file__).parent.parent,  # Relative to this file
+                Path.cwd(),                    # Current working directory
+                Path('.')                      # Current directory
+            ]
+            
+            for base in possible_bases:
+                data_dir = base / "data"
+                if data_dir.exists():
+                    self.base_path = base
+                    break
+            else:
+                self.base_path = Path('.')
+        
+        self.data_path = self.base_path / "data"
         self.excel_file = "IPH_Kota_Batu.xlsx"
         
         # Create data directory if it doesn't exist
         self.data_path.mkdir(exist_ok=True)
+        
+        # Debug info (remove in production)
+        print(f"🔍 Base path: {self.base_path.absolute()}")
+        print(f"🔍 Data path: {self.data_path.absolute()}")
+        print(f"🔍 Excel file exists: {(self.data_path / self.excel_file).exists()}")
     
     @st.cache_data
     def load_excel_data(_self):
