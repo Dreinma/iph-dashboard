@@ -2,6 +2,8 @@ import pandas as pd
 import streamlit as st
 from datetime import datetime
 import io
+import time
+from functools import wraps
 
 def format_metrics(value, metric_type='percentage'):
     """Format metrics for display"""
@@ -135,3 +137,18 @@ def validate_data(data):
         issues.append(f"⚠️ {len(large_gaps)} gap besar dalam data")
     
     return issues
+
+def monitor_performance(func):
+    """Decorator to monitor function performance"""
+    @wraps(func)
+    def wrapper(*args, **kwargs):
+        start_time = time.time()
+        result = func(*args, **kwargs)
+        end_time = time.time()
+        
+        execution_time = end_time - start_time
+        if execution_time > 2:  # Log slow operations
+            st.warning(f"⚠️ {func.__name__} took {execution_time:.2f}s to execute")
+        
+        return result
+    return wrapper

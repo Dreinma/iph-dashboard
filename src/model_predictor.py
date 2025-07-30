@@ -267,3 +267,21 @@ class ModelPredictor:
                 })
         
         return pd.DataFrame(results)
+    def get_feature_importance(self, model_name):
+        """Get feature importance for interpretability"""
+        if model_name not in self.models:
+            return None
+        
+        model = self.models[model_name]
+        
+        if hasattr(model, 'feature_importances_'):
+            importance = model.feature_importances_
+        elif hasattr(model, 'coef_'):
+            importance = np.abs(model.coef_)
+        else:
+            return None
+        
+        return pd.DataFrame({
+            'feature': self.feature_columns,
+            'importance': importance
+        }).sort_values('importance', ascending=False)

@@ -272,3 +272,20 @@ class DataLoader:
             return False
         
         return True
+    def validate_data_quality(self, df):
+        """Enhanced data quality validation"""
+        quality_report = {
+            'missing_values': df.isnull().sum().to_dict(),
+            'data_range': {
+                'start_date': df['Tanggal'].min(),
+                'end_date': df['Tanggal'].max(),
+                'total_periods': len(df)
+            },
+            'iph_statistics': {
+                'min': df['Indikator_Harga'].min(),
+                'max': df['Indikator_Harga'].max(),
+                'mean': df['Indikator_Harga'].mean(),
+                'std': df['Indikator_Harga'].std()
+            }
+        }
+        return quality_report

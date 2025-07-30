@@ -8,3 +8,6 @@ xgboost>=1.7.0
 openpyxl>=3.1.0
 pathlib
 datetime
+streamlit-option-menu>=0.3.2
+plotly-express>=0.4.1
+streamlit-aggrid>=0.3.3

@@ -475,3 +475,23 @@ class DashboardViz:
         )
         
         return fig
+    
+    def create_feature_importance_chart(self, importance_data):
+        """Create feature importance chart"""
+        fig = go.Figure(data=[
+            go.Bar(
+                y=importance_data['feature'],
+                x=importance_data['importance'],
+                orientation='h',
+                marker_color=self.color_palette['info']
+            )
+        ])
+        
+        fig.update_layout(
+            title='Feature Importance Analysis',
+            xaxis_title='Importance Score',
+            yaxis_title='Features',
+            height=400
+        )
+        
+        return fig
